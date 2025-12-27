@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Nobar Bareng</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial; background: #1a1a1a; color: white; display: flex; height: 100vh; }
+    #video-side { flex: 2; padding: 20px; }
+    #chat-side { flex: 1; background: #2a2a2a; padding: 20px; display: flex; flex-direction: column; }
+    input { padding: 10px; margin: 5px 0; background: #333; border: none; color: white; border-radius: 5px; width: 100%; }
+    button { padding: 10px 20px; background: #4CAF50; border: none; color: white; border-radius: 5px; cursor: pointer; margin: 5px 0; }
+    button:hover { background: #45a049; }
+    video { width: 100%; border-radius: 10px; background: black; margin-top: 10px; }
+    #chat { flex: 1; overflow-y: auto; background: #1a1a1a; padding: 10px; border-radius: 5px; margin: 10px 0; }
+    #chat div { margin: 5px 0; padding: 8px; background: #333; border-radius: 5px; }
+    #join-box { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); display: flex; align-items: center; justify-content: center; z-index: 999; }
+    #join-content { background: #2a2a2a; padding: 40px; border-radius: 15px; text-align: center; max-width: 400px; }
+    h1 { margin-bottom: 20px; }
+    h2 { margin-bottom: 15px; }
+  </style>
+</head>
+<body>
+  <div id="join-box">
+    <div id="join-content">
+      <h1>🎬 Nobar Bareng</h1>
+      <p style="margin-bottom: 20px; color: #aaa;">Nonton video bareng teman!</p>
+      <input id="name" placeholder="Nama kamu" maxlength="20">
+      <input id="room" placeholder="Room ID (contoh: room123)" maxlength="20">
+      <button onclick="join()">Join Room</button>
+    </div>
+  </div>
+
+  <div id="video-side">
+    <h2>🎥 Video Player</h2>
+    <input id="url" placeholder="Paste link video MP4 di sini">
+    <button onclick="loadVideo()">Load Video</button>
+    <video id="vid" controls></video>
+  </div>
+
+  <div id="chat-side">
+    <h2>💬 Chat Room</h2>
+    <div id="chat"></div>
+    <input id="msg" placeholder="Ketik pesan...">
+    <button onclick="send()">Kirim</button>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    let room, name;
+    const vid = document.getElementById('vid');
+    let syncing = false;
+
+    function join() {
+      name = document.getElementById('name').value.trim();
+      room = document.getElementById('room').value.trim();
+      if (!name || !room) return alert('Isi nama dan room ID!');
+      socket.emit('join', {username: name, room: room});
+      document.getElementById('join-box').style.display = 'none';
+    }
+
+    function loadVideo() {
+      const url = document.getElementById('url').value.trim();
+      if (!url) return alert('Paste link video dulu!');
+      vid.src = url;
+      socket.emit('video', {room: room, action: 'load', url: url});
+    }
+
+    vid.onplay = () => {
+      if (!syncing) socket.emit('video', {room: room, action: 'play', time: vid.currentTime});
+    };
+    
+    vid.onpause = () => {
+      if (!syncing) socket.emit('video', {room: room, action: 'pause', time: vid.currentTime});
+    };
+    
+    vid.onseeked = () => {
+      if (!syncing) socket.emit('video', {room: room, action: 'seek', time: vid.currentTime});
+    };
+
+    socket.on('video', (data) => {
+      syncing = true;
+      if (data.action === 'load') {
+        vid.src = data.url;
+        document.getElementById('url').value = data.url;
+      }
+      if (data.action === 'play') { 
+        vid.currentTime = data.time; 
+        vid.play();
+      }
+      if (data.action === 'pause') { 
+        vid.currentTime = data.time; 
+        vid.pause();
+      }
+      if (data.action === 'seek') vid.currentTime = data.time;
+      setTimeout(() => syncing = false, 100);
+    });
+
+    function send() {
+      const msg = document.getElementById('msg').value.trim();
+      if (!msg) return;
+      socket.emit('chat', msg);
+      document.getElementById('msg').value = '';
+    }
+
+    socket.on('chat', (data) => {
+      const chatBox = document.getElementById('chat');
+      chatBox.innerHTML += `<div><b>${data.user}:</b> ${data.msg}</div>`;
+      chatBox.scrollTop = chatBox.scrollHeight;
+    });
+
+    socket.on('message', (msg) => {
+      const chatBox = document.getElementById('chat');
+      chatBox.innerHTML += `<div style="color:#4CAF50; font-style: italic;">ℹ️ ${msg}</div>`;
+      chatBox.scrollTop = chatBox.scrollHeight;
+    });
+
+    document.getElementById('msg').onkeypress = (e) => { 
+      if (e.key === 'Enter') send(); 
+    };
+  </script>
+</body>
+</html>
